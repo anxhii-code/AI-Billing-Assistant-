@@ -1,0 +1,615 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Billing Assistant (MyBillBook Clone)</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Load Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f4f7f9;
+        }
+        .app-header {
+            background-color: #1a73e8; /* Google Blue */
+        }
+        .card {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06);
+        }
+        .btn-primary {
+            background-color: #1a73e8;
+            transition: background-color 0.15s;
+        }
+        .btn-primary:hover {
+            background-color: #1555ad;
+        }
+        .btn-secondary {
+            background-color: #4285f4;
+            transition: background-color 0.15s;
+        }
+        .btn-secondary:hover {
+            background-color: #3569c7;
+        }
+        .ai-card {
+            background-color: #e6f2ff; /* Light Blue for AI output */
+            border-left: 4px solid #1a73e8;
+        }
+        .line-item-input {
+            border: 1px solid #e2e8f0;
+            padding: 8px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <div id="loading-overlay" class="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center z-50 hidden">
+        <div class="bg-white p-6 rounded-lg flex items-center shadow-2xl">
+            <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            <span id="loading-message">Initializing...</span>
+        </div>
+    </div>
+
+    <!-- Main Header -->
+    <header class="app-header p-4 shadow-md text-white">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-xl font-bold tracking-wide flex items-center">
+                <span class="mr-2">&#9745;</span> AI Billing Assistant
+            </h1>
+            <button id="new-invoice-btn" class="bg-white text-blue-600 px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 transition duration-150 shadow-md">
+                + New Invoice
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="container mx-auto p-4 md:p-8">
+        <div class="flex flex-col md:flex-row gap-8">
+            <!-- Left Panel: Invoice List -->
+            <div class="w-full md:w-1/3">
+                <div class="bg-white p-4 rounded-xl card sticky top-4">
+                    <h2 class="text-2xl font-semibold mb-4 text-gray-800">Recent Invoices</h2>
+                    <div id="invoice-list-container" class="space-y-3 max-h-[70vh] overflow-y-auto">
+                        <!-- Invoice items will be dynamically inserted here -->
+                        <p id="no-invoices" class="text-gray-500 text-center py-4 hidden">No invoices created yet. Start billing!</p>
+                        <div id="list-placeholder" class="space-y-3">
+                             <div class="h-16 bg-gray-100 rounded-lg animate-pulse"></div>
+                             <div class="h-16 bg-gray-100 rounded-lg animate-pulse"></div>
+                             <div class="h-16 bg-gray-100 rounded-lg animate-pulse"></div>
+                        </div>
+                    </div>
+                    <div class="mt-4 text-xs text-gray-500">
+                        User ID: <span id="user-id">Loading...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Invoice Detail View -->
+            <div class="w-full md:w-2/3">
+                <div id="invoice-detail-view" class="bg-white p-6 rounded-xl card hidden">
+                    <div class="flex justify-between items-center border-b pb-3 mb-4">
+                        <h2 class="text-3xl font-bold text-gray-800">Invoice #<span id="detail-invoice-number"></span></h2>
+                        <span id="detail-date" class="text-sm text-gray-500"></span>
+                    </div>
+
+                    <p class="text-gray-600 mb-4">
+                        **Billed To:** <span id="detail-customer-name" class="font-medium text-blue-600"></span>
+                    </p>
+
+                    <!-- Line Items Table -->
+                    <div class="overflow-x-auto mb-6">
+                        <table class="min-w-full bg-white rounded-lg shadow-inner">
+                            <thead class="bg-gray-50 border-b">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Item</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Qty</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price/Unit</th>
+                                    <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody id="detail-line-items" class="divide-y divide-gray-200">
+                                <!-- Line items dynamically inserted -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Totals and Action -->
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-end pt-4 border-t">
+                        <div class="space-y-2 mb-4 sm:mb-0">
+                            <p class="text-lg font-medium text-gray-700">Subtotal: <span id="detail-subtotal" class="font-bold"></span></p>
+                            <p class="text-xl font-bold text-gray-900">Grand Total: <span id="detail-total" class="font-extrabold text-blue-600"></span></p>
+                        </div>
+                        
+                        <button id="ai-insight-btn" class="btn-primary text-white px-6 py-3 rounded-xl font-bold flex items-center shadow-lg transition duration-300">
+                            <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19V6l12-3v14a1 1 0 01-1 1H8a1 1 0 01-1-1z"></path></svg>
+                            Get AI Insight
+                        </button>
+                    </div>
+
+                    <!-- AI Assistant Output -->
+                    <div id="ai-output-container" class="mt-8 pt-6 border-t hidden">
+                        <h3 class="text-xl font-semibold mb-3 text-gray-800 flex items-center">
+                            <svg class="w-6 h-6 mr-2 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                            AI Assistant Analysis
+                        </h3>
+                        <div id="ai-output-content" class="ai-card p-4 rounded-xl text-gray-700 space-y-3">
+                            <!-- AI response will be inserted here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal for New Invoice -->
+    <div id="new-invoice-modal" class="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-40 hidden p-4">
+        <div class="bg-white w-full max-w-4xl rounded-xl shadow-2xl p-6 md:p-8 relative">
+            <h2 class="text-2xl font-bold mb-6 text-gray-800 border-b pb-3">Create New Invoice</h2>
+            <form id="new-invoice-form">
+                <div class="mb-4">
+                    <label for="customer-name" class="block text-sm font-medium text-gray-700">Customer Name</label>
+                    <input type="text" id="customer-name" required class="mt-1 block w-full rounded-lg border-gray-300 shadow-sm p-3 border" placeholder="e.g., Jane Doe Consulting">
+                </div>
+
+                <div class="mb-6">
+                    <h3 class="text-lg font-semibold mb-3 text-gray-700">Line Items</h3>
+                    <div id="line-items-container" class="space-y-3">
+                        <!-- Initial line item -->
+                        <div class="line-item flex gap-2 items-center">
+                            <input type="text" placeholder="Item Name" required class="item-name line-item-input flex-2 w-full">
+                            <input type="number" placeholder="Qty" required min="1" value="1" class="item-qty line-item-input w-20">
+                            <input type="number" placeholder="Price" required min="0.01" step="0.01" class="item-price line-item-input w-32">
+                            <button type="button" class="remove-item-btn text-red-500 hover:text-red-700 transition duration-150 p-2 rounded-full hidden">
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3m-3 0h10"></path></svg>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="button" id="add-item-btn" class="mt-4 text-blue-600 font-medium hover:text-blue-800 transition duration-150 flex items-center">
+                        <svg class="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        Add Item
+                    </button>
+                </div>
+
+                <div class="flex justify-end space-x-4 pt-4 border-t">
+                    <button type="button" id="close-modal-btn" class="px-6 py-3 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition duration-150">Cancel</button>
+                    <button type="submit" class="btn-secondary text-white px-6 py-3 rounded-lg font-bold">Save Invoice</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Firebase/Firestore Scripts and Application Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, onSnapshot, collection, query, orderBy, setDoc, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // setLogLevel('Debug'); // Enable for debugging Firestore
+
+        // --- GLOBAL VARIABLES & FIREBASE SETUP ---
+        const apiKey = ""; // API Key for LLM calls (provided by Canvas runtime)
+        const LLM_MODEL = "gemini-2.5-flash-preview-09-2025";
+        const LLM_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${LLM_MODEL}:generateContent?key=${apiKey}`;
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db = null;
+        let auth = null;
+        let userId = null;
+        let invoices = [];
+        let currentInvoice = null;
+        let invoiceListener = null;
+
+        // UI Elements
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const loadingMessage = document.getElementById('loading-message');
+        const invoiceListContainer = document.getElementById('invoice-list-container');
+        const invoiceDetailView = document.getElementById('invoice-detail-view');
+        const newInvoiceModal = document.getElementById('new-invoice-modal');
+        const newInvoiceForm = document.getElementById('new-invoice-form');
+        const addItemBtn = document.getElementById('add-item-btn');
+        const lineItemsContainer = document.getElementById('line-items-container');
+        const aiInsightBtn = document.getElementById('ai-insight-btn');
+        const aiOutputContainer = document.getElementById('ai-output-container');
+        const aiOutputContent = document.getElementById('ai-output-content');
+        // Elements accessed repeatedly via getElementById, now consolidated
+        const noInvoicesElement = document.getElementById('no-invoices');
+        const listPlaceholder = document.getElementById('list-placeholder');
+
+
+        // --- UTILITY FUNCTIONS ---
+        function showLoading(message = "Processing request...") {
+            loadingMessage.textContent = message;
+            loadingOverlay.classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            loadingOverlay.classList.add('hidden');
+        }
+
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(amount);
+        }
+
+        function getInvoiceCollectionRef(uid) {
+            return collection(db, 'artifacts', appId, 'users', uid, 'invoices');
+        }
+
+        // --- FIREBASE INITIALIZATION AND AUTH ---
+        async function initializeFirebase() {
+            try {
+                showLoading("Initializing Firebase and authenticating...");
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        document.getElementById('user-id').textContent = userId;
+                        setupInvoiceListener(userId);
+                    } else {
+                        // Fallback/Anonymous logic, though signInAnonymously handles this
+                        userId = crypto.randomUUID(); 
+                        document.getElementById('user-id').textContent = userId + " (Anon)";
+                        hideLoading();
+                        console.error("Authentication failed. Using anonymous ID.");
+                    }
+                });
+
+            } catch (error) {
+                console.error("Error during Firebase initialization or sign-in:", error);
+                hideLoading();
+            }
+        }
+
+        // --- FIREBASE DATA MANAGEMENT ---
+
+        function setupInvoiceListener(uid) {
+            if (invoiceListener) {
+                invoiceListener(); // Unsubscribe previous listener
+            }
+
+            const q = query(getInvoiceCollectionRef(uid), orderBy("invoiceNumber", "desc"));
+            
+            invoiceListener = onSnapshot(q, (snapshot) => {
+                invoices = [];
+                snapshot.forEach((doc) => {
+                    invoices.push({ id: doc.id, ...doc.data() });
+                });
+                renderInvoiceList();
+                // If an invoice was being viewed, try to re-render it
+                if (currentInvoice) {
+                    const updatedInvoice = invoices.find(inv => inv.id === currentInvoice.id);
+                    if (updatedInvoice) {
+                        displayInvoiceDetail(updatedInvoice);
+                    } else {
+                        // The viewed invoice was deleted
+                        invoiceDetailView.classList.add('hidden');
+                        currentInvoice = null;
+                    }
+                }
+                
+                // Hide the loading placeholder now that the list has rendered
+                listPlaceholder.classList.add('hidden');
+                
+                hideLoading();
+            }, (error) => {
+                console.error("Firestore snapshot error:", error);
+                hideLoading();
+            });
+        }
+
+
+        async function saveInvoice(invoiceData) {
+            showLoading("Saving invoice...");
+            try {
+                // Generate a unique sequential invoice number (simplified for assignment)
+                const nextInvoiceNumber = invoices.length > 0 ? invoices[0].invoiceNumber + 1 : 1001;
+                
+                const newInvoice = {
+                    ...invoiceData,
+                    date: new Date().toISOString().split('T')[0],
+                    timestamp: Date.now(),
+                    invoiceNumber: nextInvoiceNumber,
+                };
+
+                // Use a combination of timestamp and invoice number as doc ID to ensure uniqueness and simple reference
+                const docId = `INV-${newInvoice.invoiceNumber}-${newInvoice.timestamp}`;
+                
+                await setDoc(doc(getInvoiceCollectionRef(userId), docId), newInvoice);
+                
+                newInvoiceModal.classList.add('hidden');
+                newInvoiceForm.reset();
+                // Display the newly created invoice detail
+                displayInvoiceDetail({ id: docId, ...newInvoice });
+                
+                alertUser("Invoice saved successfully!");
+
+            } catch (e) {
+                console.error("Error adding document: ", e);
+                alertUser("Error saving invoice. Check console for details.");
+            } finally {
+                hideLoading();
+            }
+        }
+        
+        async function deleteInvoice(invoiceId) {
+            showLoading("Deleting invoice...");
+             try {
+                await deleteDoc(doc(getInvoiceCollectionRef(userId), invoiceId));
+                alertUser(`Invoice #${currentInvoice.invoiceNumber} deleted.`);
+                invoiceDetailView.classList.add('hidden');
+                currentInvoice = null;
+            } catch (e) {
+                console.error("Error deleting document: ", e);
+                alertUser("Error deleting invoice. Check console for details.");
+            } finally {
+                hideLoading();
+            }
+        }
+
+
+        // --- UI RENDERING & LOGIC ---
+
+        function alertUser(message) {
+            // Using a temporary visual cue instead of alert()
+            const header = document.querySelector('.app-header');
+            const originalColor = header.style.backgroundColor;
+            header.style.backgroundColor = '#4CAF50'; // Green for success
+            header.querySelector('h1').textContent = `✅ ${message}`;
+            setTimeout(() => {
+                header.style.backgroundColor = originalColor;
+                header.querySelector('h1').innerHTML = '<span class="mr-2">&#9745;</span> AI Billing Assistant';
+            }, 3000);
+        }
+
+        function renderInvoiceList() {
+            invoiceListContainer.innerHTML = '';
+            if (invoices.length === 0) {
+                noInvoicesElement.classList.remove('hidden');
+                return;
+            }
+            noInvoicesElement.classList.add('hidden');
+
+            invoices.forEach(invoice => {
+                const item = document.createElement('div');
+                item.className = 'p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-pointer hover:bg-blue-50 transition duration-150';
+                item.innerHTML = `
+                    <div class="font-bold text-gray-800 flex justify-between items-center">
+                        #${invoice.invoiceNumber}
+                        <span class="text-xs font-semibold text-blue-600">${formatCurrency(invoice.total)}</span>
+                    </div>
+                    <div class="text-sm text-gray-600">${invoice.customerName}</div>
+                `;
+                item.onclick = () => displayInvoiceDetail(invoice);
+                invoiceListContainer.appendChild(item);
+            });
+        }
+
+        function displayInvoiceDetail(invoice) {
+            currentInvoice = invoice;
+            
+            aiOutputContainer.classList.add('hidden');
+            aiOutputContent.innerHTML = '';
+
+            document.getElementById('detail-invoice-number').textContent = invoice.invoiceNumber;
+            document.getElementById('detail-date').textContent = new Date(invoice.timestamp).toLocaleDateString();
+            document.getElementById('detail-customer-name').textContent = invoice.customerName;
+
+            const itemsBody = document.getElementById('detail-line-items');
+            itemsBody.innerHTML = '';
+
+            invoice.items.forEach(item => {
+                const row = document.createElement('tr');
+                row.className = 'hover:bg-gray-50';
+                row.innerHTML = `
+                    <td class="px-4 py-3 text-sm font-medium text-gray-900">${item.name}</td>
+                    <td class="px-4 py-3 text-sm text-gray-700">${item.qty}</td>
+                    <td class="px-4 py-3 text-sm text-gray-700">${formatCurrency(item.price)}</td>
+                    <td class="px-4 py-3 text-sm font-semibold text-right text-gray-900">${formatCurrency(item.qty * item.price)}</td>
+                `;
+                itemsBody.appendChild(row);
+            });
+
+            document.getElementById('detail-subtotal').textContent = formatCurrency(invoice.subtotal);
+            document.getElementById('detail-total').textContent = formatCurrency(invoice.total);
+            
+            // Add a delete button to the detail view (optional, but useful)
+            let deleteBtn = document.getElementById('delete-invoice-btn');
+            if (!deleteBtn) {
+                deleteBtn = document.createElement('button');
+                deleteBtn.id = 'delete-invoice-btn';
+                deleteBtn.className = 'text-red-500 hover:text-red-700 text-sm mt-4 font-medium';
+                deleteBtn.innerHTML = 'Delete Invoice';
+                document.getElementById('invoice-detail-view').appendChild(deleteBtn);
+            }
+            deleteBtn.onclick = () => {
+                // NOTE: Using custom modal/confirmation is preferred, but for this context, a simple check suffices.
+                if (confirm(`Are you sure you want to delete Invoice #${invoice.invoiceNumber}?`)) {
+                    deleteInvoice(invoice.id);
+                }
+            };
+            
+            invoiceDetailView.classList.remove('hidden');
+        }
+
+        // --- LINE ITEM UI HANDLERS ---
+        function createLineItemElement(canRemove = true) {
+            const div = document.createElement('div');
+            div.className = 'line-item flex gap-2 items-center';
+            div.innerHTML = `
+                <input type="text" placeholder="Item Name" required class="item-name line-item-input flex-2 w-full">
+                <input type="number" placeholder="Qty" required min="1" value="1" class="item-qty line-item-input w-20">
+                <input type="number" placeholder="Price" required min="0.01" step="0.01" class="item-price line-item-input w-32">
+                <button type="button" class="remove-item-btn text-red-500 hover:text-red-700 transition duration-150 p-2 rounded-full ${canRemove ? '' : 'hidden'}">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3m-3 0h10"></path></svg>
+                </button>
+            `;
+            
+            if (canRemove) {
+                div.querySelector('.remove-item-btn').onclick = () => {
+                    div.remove();
+                    // Ensure the one remaining item can't be removed
+                    if (lineItemsContainer.children.length === 1) {
+                        lineItemsContainer.querySelector('.remove-item-btn').classList.add('hidden');
+                    }
+                };
+            }
+            
+            return div;
+        }
+
+        // --- AI ASSISTANT FUNCTIONALITY ---
+
+        async function callAIAssistant(invoice) {
+            aiOutputContainer.classList.remove('hidden');
+            aiOutputContent.innerHTML = '<p class="text-center flex items-center justify-center text-blue-600"><svg class="animate-spin h-5 w-5 mr-3" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Generating insights...</p>';
+            
+            const systemPrompt = "Act as a specialized business financial analyst. Analyze the provided invoice details and generate a two-part response: 1. A brief, professional summary of the transaction (mentioning customer, date, and total amount). 2. A single, concrete business insight or suggestion (e.g., suggest a loyalty discount, highlight the high-margin item, or categorize the expense). Format the response using standard Markdown list items.";
+            
+            // Prepare the data to send to the LLM (removing Firebase-specific metadata)
+            const llmInvoiceData = {
+                invoiceNumber: invoice.invoiceNumber,
+                customerName: invoice.customerName,
+                date: invoice.date,
+                subtotal: invoice.subtotal,
+                total: invoice.total,
+                items: invoice.items
+            };
+
+            const userQuery = `Analyze the following invoice data (in JSON format) and provide a summary and a business insight. The totals are in INR: \n\n${JSON.stringify(llmInvoiceData, null, 2)}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: userQuery }] }],
+                systemInstruction: {
+                    parts: [{ text: systemPrompt }]
+                },
+            };
+
+            const maxRetries = 3;
+            let currentDelay = 1000;
+
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(LLM_API_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (response.ok) {
+                        const result = await response.json();
+                        const text = result.candidates?.[0]?.content?.parts?.[0]?.text || "Could not generate insight.";
+                        
+                        // Format the output nicely
+                        const formattedHtml = text
+                            .replace(/^\*\s/, '<strong>Summary:</strong> ')
+                            .replace(/^\*\s/gm, '<hr class="my-3 border-gray-300"/><strong>Insight:</strong> ')
+                            .split('\n')
+                            .map(line => `<p>${line}</p>`).join('');
+
+                        aiOutputContent.innerHTML = formattedHtml;
+                        return;
+                    } else if (response.status === 429 && i < maxRetries - 1) {
+                        // Rate limit error, retry with exponential backoff
+                        console.warn(`Rate limit hit. Retrying in ${currentDelay / 1000}s...`);
+                        await new Promise(resolve => setTimeout(resolve, currentDelay));
+                        currentDelay *= 2;
+                    } else {
+                        throw new Error(`API error: ${response.statusText}`);
+                    }
+                } catch (error) {
+                    console.error("Gemini API call failed:", error);
+                    aiOutputContent.innerHTML = `<p class="text-red-600">AI Assistant Error: Could not connect to service. ${error.message}</p>`;
+                    return;
+                }
+            }
+        }
+
+        // --- EVENT LISTENERS ---
+
+        // Show Modal
+        document.getElementById('new-invoice-btn').addEventListener('click', () => {
+            newInvoiceModal.classList.remove('hidden');
+            // Reset items to one line
+            lineItemsContainer.innerHTML = '';
+            lineItemsContainer.appendChild(createLineItemElement(false)); // Initial item cannot be removed
+        });
+
+        // Close Modal
+        document.getElementById('close-modal-btn').addEventListener('click', () => {
+            newInvoiceModal.classList.add('hidden');
+        });
+
+        // Add Line Item
+        addItemBtn.addEventListener('click', () => {
+            // Re-enable remove button on existing item if it's the only one
+            if (lineItemsContainer.children.length === 1) {
+                 lineItemsContainer.querySelector('.remove-item-btn').classList.remove('hidden');
+            }
+            // Add new item that can be removed
+            lineItemsContainer.appendChild(createLineItemElement(true)); 
+        });
+
+        // AI Insight Button
+        aiInsightBtn.addEventListener('click', () => {
+            if (currentInvoice) {
+                callAIAssistant(currentInvoice);
+            }
+        });
+
+        // Handle Form Submission
+        newInvoiceForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+
+            const customerName = document.getElementById('customer-name').value.trim();
+            const items = [];
+            let subtotal = 0;
+
+            const itemElements = lineItemsContainer.querySelectorAll('.line-item');
+            
+            itemElements.forEach(itemDiv => {
+                const name = itemDiv.querySelector('.item-name').value.trim();
+                const qty = parseInt(itemDiv.querySelector('.item-qty').value);
+                const price = parseFloat(itemDiv.querySelector('.item-price').value);
+
+                if (name && qty > 0 && price >= 0.01) {
+                    const itemTotal = qty * price;
+                    items.push({ name, qty, price, itemTotal });
+                    subtotal += itemTotal;
+                }
+            });
+
+            if (items.length === 0) {
+                alertUser("Please add at least one valid line item.");
+                return;
+            }
+
+            // Simple calculation (assuming 0 tax for this assignment)
+            const total = subtotal; 
+
+            const invoiceData = { customerName, items, subtotal, total };
+            saveInvoice(invoiceData);
+        });
+
+        // --- START APPLICATION ---
+        initializeFirebase();
+    </script>
+</body>
+</html>
